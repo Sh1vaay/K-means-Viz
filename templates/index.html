@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cyberpunk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClusterViz | Interactive Clustering Playground</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="app-layout">
+        <aside class="sidebar glass-panel">
+            <div class="top-bar">
+                <h1>ClusterViz</h1>
+                <div class="theme-toggle">
+                    <button class="theme-btn" onclick="startTutorial()" title="Interactive Tutorial"
+                        style="font-size:1rem;">🎓</button>
+                    <button class="theme-btn active" onclick="setTheme('cyberpunk')" title="Cyberpunk Dark">🌙</button>
+                    <button class="theme-btn" onclick="setTheme('pastel')" title="Pastel Light">☀️</button>
+                </div>
+            </div>
+            <p class="subtitle">Interactive 2D Playground</p>
+
+            <div class="controls-section">
+                <h3>Algorithm</h3>
+                <div class="toggle-switch algo-toggle">
+                    <button id="algo-kmeans" class="toggle-btn active" onclick="setAlgorithm('kmeans')">K-Means</button>
+                    <button id="algo-dbscan" class="toggle-btn" onclick="setAlgorithm('dbscan')">DBSCAN</button>
+                    <button id="algo-gmm" class="toggle-btn" onclick="setAlgorithm('gmm')">GMM</button>
+                    <button id="algo-hierarchical" class="toggle-btn"
+                        onclick="setAlgorithm('hierarchical')">Hier.</button>
+                </div>
+
+                <h3>Dataset</h3>
+                <div class="btn-group">
+                    <button class="btn-secondary" onclick="generateData('blobs')">Blobs</button>
+                    <button class="btn-secondary" onclick="generateData('moons')">Moons</button>
+                    <button class="btn-secondary" onclick="generateData('circles')">Circles</button>
+                    <button class="btn-secondary" onclick="generateData('aniso')">Aniso</button>
+                    <button class="btn-secondary" onclick="generateData('random')">Random</button>
+                </div>
+
+                <h3>View</h3>
+                <div class="toggle-switch">
+                    <button id="view-2d" class="toggle-btn active" onclick="setViewMode('2d')">2D</button>
+                    <button id="view-3d" class="toggle-btn" onclick="setViewMode('3d')">3D</button>
+                </div>
+
+                <h3>Color Palette</h3>
+                <div class="toggle-switch" style="flex-wrap:wrap;">
+                    <button class="toggle-btn active" data-palette="neon"
+                        onclick="setColorPalette('neon')">Neon</button>
+                    <button class="toggle-btn" data-palette="viridis"
+                        onclick="setColorPalette('viridis')">Viridis</button>
+                    <button class="toggle-btn" data-palette="plasma" onclick="setColorPalette('plasma')">Plasma</button>
+                    <button class="toggle-btn" data-palette="earthy" onclick="setColorPalette('earthy')">Earthy</button>
+                </div>
+
+                <h3>Canvas Tools</h3>
+                <div class="tool-bar">
+                    <button id="tool-pointer" class="tool-btn active" onclick="setTool('pointer')">👆 Pointer</button>
+                    <button id="tool-spray" class="tool-btn" onclick="setTool('spray')">🎨 Spray</button>
+                    <button id="tool-drag" class="tool-btn" onclick="setTool('drag')">✋ Drag</button>
+                </div>
+                <div id="brush-size-row" style="display:none;">
+                    <label>Brush Radius: <span id="brush-display">15</span></label>
+                    <input type="range" id="brush-size" min="5" max="40" value="15" step="1">
+                </div>
+
+                <!-- K-Means params -->
+                <div id="kmeans-params">
+                    <h3>Parameters</h3>
+                    <label>Clusters (K): <span id="k-display">4</span></label>
+                    <input type="range" id="k-value" min="2" max="10" value="4">
+                    <div class="control-row">
+                        <label>Init Mode:</label>
+                        <div class="toggle-switch">
+                            <button id="init-random" class="toggle-btn active"
+                                onclick="setInitMode('random')">Random</button>
+                            <button id="init-manual" class="toggle-btn" onclick="setInitMode('manual')">Manual</button>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <label>Distance:</label>
+                        <div class="toggle-switch">
+                            <button id="dist-euclidean" class="toggle-btn active"
+                                onclick="setDistanceMetric('euclidean')">Euclid</button>
+                            <button id="dist-manhattan" class="toggle-btn"
+                                onclick="setDistanceMetric('manhattan')">Manhattan</button>
+                            <button id="dist-cosine" class="toggle-btn"
+                                onclick="setDistanceMetric('cosine')">Cosine</button>
+                        </div>
+                    </div>
+                    <button class="btn-outline" onclick="suggestK()" style="margin-top:0.5rem; font-size:0.8rem;">🔮
+                        Suggest Best K</button>
+                    <p id="auto-k-result" class="small-meta" style="margin-top:0.3rem;"></p>
+                </div>
+
+                <!-- DBSCAN params -->
+                <div id="dbscan-params" style="display: none;">
+                    <h3>Parameters</h3>
+                    <label>Epsilon (eps): <span id="eps-display">0.50</span></label>
+                    <input type="range" id="eps-value" min="0.1" max="3.0" value="0.5" step="0.05">
+                    <label>Min Samples: <span id="min-samples-display">5</span></label>
+                    <input type="range" id="min-samples-value" min="2" max="20" value="5" step="1">
+                </div>
+
+                <!-- GMM params -->
+                <div id="gmm-params" style="display: none;">
+                    <h3>Parameters</h3>
+                    <label>Components: <span id="gmm-k-display">4</span></label>
+                    <input type="range" id="gmm-k-value" min="2" max="10" value="4">
+                </div>
+
+                <!-- Hierarchical params -->
+                <div id="hier-params" style="display: none;">
+                    <h3>Parameters</h3>
+                    <label>Clusters: <span id="hier-k-display">4</span></label>
+                    <input type="range" id="hier-k-value" min="2" max="10" value="4">
+                </div>
+
+                <!-- Simulation controls -->
+                <h3>Simulation Controls</h3>
+                <div class="control-row">
+                    <label>Speed:</label>
+                    <input type="range" id="speed-val" min="50" max="2000" value="500" step="50">
+                </div>
+                <div class="btn-vstack">
+                    <button class="btn-primary" id="runBtn" onclick="toggleSimulation()">Start Animation</button>
+                    <div style="display:flex; gap:0.4rem;">
+                        <button class="btn-outline" style="flex:1;" id="undoBtn" onclick="undoStep()"
+                            title="Undo last step">↩ Undo</button>
+                        <button class="btn-outline" style="flex:1;" id="stepBtn" onclick="manualStep()">Next Step
+                            &rarr;</button>
+                    </div>
+                    <button class="btn-outline" onclick="reset()">Reset</button>
+                    <button class="btn-outline" onclick="downloadCSV()" title="Export clustered data as CSV">⬇ Download
+                        CSV</button>
+                </div>
+
+                <!-- Evaluation Metrics -->
+                <div class="status-panel" id="metrics-panel">
+                    <h3>Evaluation Metrics</h3>
+                    <div class="metric-row">
+                        <span>Silhouette Score</span>
+                        <span id="silhouette-val" class="mono">—</span>
+                    </div>
+                    <div class="metric-row">
+                        <span>Davies-Bouldin</span>
+                        <span id="db-val" class="mono">—</span>
+                    </div>
+                    <button class="btn-outline analysis-btn" id="analysisBtn" onclick="openAnalysisModal()"
+                        style="margin-top:0.8rem;">
+                        📊 Elbow / K-Distance Graph
+                    </button>
+                    <button class="btn-outline" id="compareBtn" onclick="toggleCompareMode()"
+                        style="margin-top:0.4rem; font-size:0.8rem;">🔀 Compare Algorithms</button>
+                    <div id="compare-results" style="display:none; margin-top:0.6rem;"></div>
+                </div>
+
+                <div class="status-panel">
+                    <h3>Step explanation</h3>
+                    <div id="phase-badge" class="badge ready">Ready</div>
+                    <p id="step-desc" class="desc-text">Select an algorithm and dataset to begin.</p>
+                    <div class="metric-row">
+                        <span id="metric-label">Inertia:</span>
+                        <span id="inertia-val" class="mono">0.00</span>
+                    </div>
+                    <p class="small-meta" id="iteration-meta">Iteration: <span id="iteration">0</span></p>
+                </div>
+            </div>
+        </aside>
+
+        <main id="canvas-wrap" class="canvas-container glass-panel">
+            <canvas id="clusterChart"></canvas>
+            <div id="plotly3d" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;"></div>
+            <div class="canvas-overlay" id="canvas-overlay">
+                <p>Select a tool and interact with the canvas!</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Analysis Modal -->
+    <div id="analysis-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content glass-panel" style="width:700px;">
+            <div class="modal-header">
+                <h2 id="modal-title">Analysis</h2>
+                <button class="modal-close" onclick="closeAnalysisModal()">&times;</button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab active" data-tab="elbow" onclick="switchModalTab('elbow')">Elbow</button>
+                <button class="modal-tab" data-tab="silhouette"
+                    onclick="switchModalTab('silhouette')">Silhouette</button>
+                <button class="modal-tab" data-tab="stats" onclick="switchModalTab('stats')">Cluster Stats</button>
+                <button class="modal-tab" data-tab="features" onclick="switchModalTab('features')">Features</button>
+                <button class="modal-tab" data-tab="autok" onclick="switchModalTab('autok')">Auto-K</button>
+                <button class="modal-tab" data-tab="pca" onclick="switchModalTab('pca')">PCA</button>
+                <button class="modal-tab" data-tab="parcoords" onclick="switchModalTab('parcoords')">Par.Coords</button>
+                <button class="modal-tab" data-tab="boxplot" onclick="switchModalTab('boxplot')">BoxPlot</button>
+            </div>
+            <div id="tab-elbow" class="modal-tab-content active">
+                <canvas id="analysisChart" height="300"></canvas>
+                <p id="analysis-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+            <div id="tab-silhouette" class="modal-tab-content" style="display:none;">
+                <canvas id="silhouetteChart" height="300"></canvas>
+                <p id="silhouette-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+            <div id="tab-stats" class="modal-tab-content" style="display:none;">
+                <div id="stats-container" style="max-height:350px; overflow-y:auto;"></div>
+            </div>
+            <div id="tab-features" class="modal-tab-content" style="display:none;">
+                <canvas id="featureChart" height="300"></canvas>
+                <p id="feature-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+            <div id="tab-autok" class="modal-tab-content" style="display:none;">
+                <canvas id="autokChart" height="300"></canvas>
+                <p id="autok-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+            <div id="tab-pca" class="modal-tab-content" style="display:none;">
+                <canvas id="pcaChart" height="300"></canvas>
+                <p id="pca-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+            <div id="tab-parcoords" class="modal-tab-content" style="display:none;">
+                <canvas id="parcoordsCanvas" height="300"></canvas>
+                <p id="parcoords-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+            <div id="tab-boxplot" class="modal-tab-content" style="display:none;">
+                <div id="boxplot-container" style="max-height:400px; overflow-y:auto;"></div>
+                <p id="boxplot-hint" class="small-meta" style="text-align:center; margin-top:1rem;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" style="display:none;">
+        <div id="tutorial-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9998;"
+            onclick="endTutorial()"></div>
+        <div id="tutorial-spotlight"
+            style="position:fixed; z-index:9999; border:2px solid var(--secondary); border-radius:12px; box-shadow:0 0 0 9999px rgba(0,0,0,0.55); pointer-events:none; transition:all 0.4s ease;">
+        </div>
+        <div id="tutorial-tooltip" class="glass-panel"
+            style="position:fixed; z-index:10000; padding:1rem 1.2rem; border-radius:12px; max-width:320px; transition:all 0.4s ease;">
+            <p id="tutorial-text" style="margin:0 0 0.8rem; font-size:0.85rem; line-height:1.5;"></p>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span id="tutorial-step-num" class="small-meta"></span>
+                <div style="display:flex; gap:0.4rem;">
+                    <button class="btn-outline" onclick="endTutorial()"
+                        style="font-size:0.75rem; padding:0.3rem 0.6rem;">Skip</button>
+                    <button class="btn-primary" onclick="nextTutorialStep()"
+                        style="font-size:0.75rem; padding:0.3rem 0.8rem;" id="tutorial-next-btn">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>
